@@ -3,12 +3,24 @@ const WHATSAPP = ""; // مثال: "213555000000"
 const PRODUCT_ID = "sovidio-cooker";
 const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzZdObxY6pD7m7-RAr5NC4v9C00FjHztwiUq-Yos-kD_9CRBdLLMc4buKsXwpeQY9c/exec";
 
-function sendToSheet(payload) {
-  if (!SHEETS_WEBAPP_URL) {
-    console.warn("Google Sheet غير مربوط: أضف SHEETS_WEBAPP_URL في js/main.js");
-    return Promise.resolve();
+function adClickId() {
+  const fromUrl = new URLSearchParams(location.search).get("fbclid");
+  if (fromUrl) {
+    try { sessionStorage.setItem("fbclid", fromUrl); } catch (_) {}
+    return fromUrl;
   }
-  const params = new URLSearchParams({
+  try { return sessionStorage.getItem("fbclid") || ""; } catch (_) { return ""; }
+}
+
+function orderSource() {
+  if (adClickId()) return "meta-ads";
+  const ua = navigator.userAgent || "";
+  if (/FBAN|FBAV|Instagram/i.test(ua)) return "meta-inapp";
+  return "landing";
+}
+
+function sendToSheet(payload) {
+  const body = {
     name: payload.name || "",
     phone: payload.phone || "",
     wilaya: payload.wilaya || "",
@@ -16,11 +28,22 @@ function sendToSheet(payload) {
     color: payload.color || "",
     qty: String(payload.qty || 1),
     total: String(payload.total || 0),
-    offer: payload.offer || "لانش بوكس مجاني"
-  });
-  const url = `${SHEETS_WEBAPP_URL}?${params.toString()}`;
-  return fetch(url, { method: "GET", mode: "no-cors", keepalive: true }).catch(() => {
-    new Image().src = url;
+    offer: payload.offer || "لانش بوكس مجاني",
+    source: orderSource(),
+    fbclid: adClickId()
+  };
+
+  return fetch("/api/order", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    keepalive: true
+  }).catch(() => {
+    const params = new URLSearchParams(body);
+    const url = `${SHEETS_WEBAPP_URL}?${params.toString()}`;
+    return fetch(url, { method: "GET", mode: "no-cors", keepalive: true }).catch(() => {
+      new Image().src = url;
+    });
   });
 }
 
@@ -198,6 +221,7 @@ window.addEventListener("scroll", toggleSticky, { passive: true });
 window.addEventListener("resize", toggleSticky);
 toggleSticky();
 refreshTotals();
+adClickId();
 
 track("ViewContent", { value: PRICE, num_items: 1 });
 

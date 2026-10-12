@@ -49,7 +49,7 @@ function appendOrder(data) {
     Number(data.qty) || 1,
     Number(data.total) || 0,
     data.offer || "لانش بوكس مجاني",
-    "landing"
+    data.fbclid ? ("meta-ads " + data.fbclid) : (data.source || "landing")
   ]);
 }
 
