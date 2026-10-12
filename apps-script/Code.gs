@@ -1,59 +1,74 @@
-function doGet() {
+function json_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  const data = (e && e.parameter) || {};
+  if (data.name && data.phone) {
+    try {
+      appendOrder(data);
+      return json_({ ok: true });
+    } catch (err) {
+      return json_({ ok: false, error: String(err) });
+    }
+  }
   return ContentService.createTextOutput("Sovidio orders ready");
 }
 
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
-    const sheet = getMahdiSheet();
-    ensureHeaders(sheet);
-    sheet.appendRow([
-      new Date(),
-      data.name || "",
-      "'" + String(data.phone || ""),
-      data.wilaya || "",
-      data.address || "",
-      data.color || "",
-      Number(data.qty) || 1,
-      Number(data.total) || 0,
-      data.offer || "لانش بوكس مجاني",
-      "landing"
-    ]);
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: true }))
-      .setMimeType(ContentService.MimeType.JSON);
+    let data = {};
+    if (e && e.postData && e.postData.contents) {
+      try {
+        data = JSON.parse(e.postData.contents);
+      } catch (_) {
+        data = (e.parameter) || {};
+      }
+    } else {
+      data = (e && e.parameter) || {};
+    }
+    appendOrder(data);
+    return json_({ ok: true });
   } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return json_({ ok: false, error: String(err) });
   }
 }
 
+function appendOrder(data) {
+  const sheet = getMahdiSheet();
+  ensureHeaders(sheet);
+  sheet.appendRow([
+    new Date(),
+    data.name || "",
+    "'" + String(data.phone || ""),
+    data.wilaya || "",
+    data.address || "",
+    data.color || "",
+    Number(data.qty) || 1,
+    Number(data.total) || 0,
+    data.offer || "لانش بوكس مجاني",
+    "landing"
+  ]);
+}
+
 function getMahdiSheet() {
-  const active = SpreadsheetApp.getActiveSpreadsheet();
-  const ss = active || openOrCreateMahdiFile();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    throw new Error("Ouvre Apps Script depuis le Google Sheet mahdi, puis redéploie.");
+  }
   let sheet = ss.getSheetByName("mahdi");
   if (!sheet) {
-    const first = ss.getSheets()[0];
-    if (first.getLastRow() === 0) {
-      first.setName("mahdi");
-      sheet = first;
-    } else {
-      sheet = ss.insertSheet("mahdi");
-    }
+    sheet = ss.getSheets()[0];
+    sheet.setName("mahdi");
   }
   return sheet;
 }
 
-function openOrCreateMahdiFile() {
-  const files = DriveApp.getFilesByName("mahdi");
-  return files.hasNext()
-    ? SpreadsheetApp.open(files.next())
-    : SpreadsheetApp.create("mahdi");
-}
-
 function ensureHeaders(sheet) {
-  if (sheet.getLastRow() > 0) return;
+  const first = sheet.getRange(1, 1).getValue();
+  if (first) return;
   sheet.appendRow([
     "التاريخ",
     "الاسم",

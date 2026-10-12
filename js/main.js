@@ -8,12 +8,20 @@ function sendToSheet(payload) {
     console.warn("Google Sheet غير مربوط: أضف SHEETS_WEBAPP_URL في js/main.js");
     return Promise.resolve();
   }
-  return fetch(SHEETS_WEBAPP_URL, {
-    method: "POST",
-    mode: "no-cors",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(payload)
-  }).catch((err) => console.warn("Sheet error", err));
+  const params = new URLSearchParams({
+    name: payload.name || "",
+    phone: payload.phone || "",
+    wilaya: payload.wilaya || "",
+    address: payload.address || "",
+    color: payload.color || "",
+    qty: String(payload.qty || 1),
+    total: String(payload.total || 0),
+    offer: payload.offer || "لانش بوكس مجاني"
+  });
+  const url = `${SHEETS_WEBAPP_URL}?${params.toString()}`;
+  return fetch(url, { method: "GET", mode: "no-cors", keepalive: true }).catch(() => {
+    new Image().src = url;
+  });
 }
 
 function selectedColor() {
@@ -21,25 +29,37 @@ function selectedColor() {
   return checked ? checked.value : "أخضر";
 }
 
+function pixelValue(amount) {
+  const value = Number(amount);
+  return Number.isFinite(value) && value > 0 ? value : PRICE;
+}
+
 function pixelData(extra = {}) {
   const qty = Number(qtyInput?.value) || 1;
   const color = selectedColor();
+  const value = pixelValue(extra.value != null ? extra.value : qty * PRICE);
+  const { value: _ignored, ...rest } = extra;
   return {
     content_ids: [PRODUCT_ID],
     content_name: `Sovidio ${color}`,
     content_type: "product",
     content_category: "Kitchen",
     currency: "DZD",
-    value: currentTotal(),
+    value,
     num_items: qty,
     contents: [{ id: PRODUCT_ID, quantity: qty, item_price: PRICE }],
-    ...extra
+    ...rest
   };
 }
 
-function track(event, extra) {
+function track(event, extra, options) {
   if (typeof fbq !== "function") return;
-  fbq("track", event, pixelData(extra));
+  const data = pixelData(extra);
+  if (options && options.eventID) {
+    fbq("track", event, data, { eventID: options.eventID });
+    return;
+  }
+  fbq("track", event, data);
 }
 
 const WILAYAS = [
@@ -134,7 +154,6 @@ form.addEventListener("submit", (event) => {
 
   thanksText.textContent = `شكراً ${data.name}. طلبك (${formatPrice(total)} دج + لانش بوكس) من ولاية ${data.wilaya} سيتم تأكيده عبر الهاتف.`;
   thanks.hidden = false;
-  track("Purchase", { value: total });
   sendToSheet({
     name: data.name,
     phone: data.phone,
@@ -144,6 +163,10 @@ form.addEventListener("submit", (event) => {
     qty: data.qty,
     total,
     offer: "لانش بوكس مجاني"
+  });
+  const purchaseValue = pixelValue(total);
+  track("Purchase", { value: purchaseValue, num_items: Number(data.qty) || 1 }, {
+    eventID: `purchase_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   });
 
   if (WHATSAPP) {
@@ -176,7 +199,7 @@ window.addEventListener("resize", toggleSticky);
 toggleSticky();
 refreshTotals();
 
-track("ViewContent");
+track("ViewContent", { value: PRICE, num_items: 1 });
 
 let checkoutStarted = false;
 const startCheckout = () => {
